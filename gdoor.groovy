@@ -73,6 +73,6 @@ def parse(String description) {
 }
 
 def pushButton() {
-    log.debug "Left Button pressed"
+    log.debug "Garage Button pressed"
     zigbee.smartShield(text: "pushButton").format()
 }

@@ -17,9 +17,10 @@
 #define PIN_LED              13
 #define PIN_THING_RX          3
 #define PIN_THING_TX          2
-#define PIN_BACK_DOOR_CONTACT 4     // input
-#define PIN_GARAGE_CONTACT      8     // input
-#define PIN_GARAGE              9     // out
+#define PIN_GARAGE              4     // out
+#define PIN_BACK_DOOR_CONTACT 8     // input
+#define PIN_GARAGE_CONTACT      9     // input
+
 
 #define OPEN                  0     // HIGH
 #define CLOSED                1     // LOW
@@ -48,9 +49,9 @@ int stateNetwork;       // state of the network
 void pushButton()
 {
   smartthing.shieldSetLED(0, 0, 2); // blue
-  digitalWrite(PIN_GARAGE,LOW);
-  delay(PUSH_DELAY);
   digitalWrite(PIN_GARAGE,HIGH);
+  delay(PUSH_DELAY);
+  digitalWrite(PIN_GARAGE,LOW);
   smartthing.shieldSetLED(0, 0, 0); // off
 }
 
@@ -72,8 +73,8 @@ void updateDoorState()
   if (leftClosed != newState)
   {
     leftClosed = newState;
-    if(leftClosed == CLOSED) msg = "leftDoor closed";
-    else                     msg = "leftDoor open";
+    if(leftClosed == CLOSED) msg = "garageDoor closed";
+    else                     msg = "garageDoor open";
 
     smartthing.send(msg);
     if(isDebugEnabled) Serial.println(msg);
@@ -98,9 +99,9 @@ void updateDoorState()
   newState = CLOSED;
 
 #ifdef DO_BACK_DOOR
-  if(rightClosed == OPEN || leftClosed == OPEN || backClosed == OPEN) newState = OPEN;
+  if(leftClosed == OPEN || backClosed == OPEN) newState = OPEN;
 #else
-  if(rightClosed == OPEN || leftClosed == OPEN) newState = OPEN;
+  if(leftClosed == OPEN) newState = OPEN;
 #endif
 
   if(anyOpen != newState)
@@ -138,7 +139,6 @@ void setNetworkStateLED()
 
         // force report of current door state
         leftClosed  = UNKNOWN;
-        rightClosed = UNKNOWN;
         backClosed  = UNKNOWN;
         anyOpen     = UNKNOWN;
 
@@ -175,7 +175,7 @@ void setup()
   // setup hardware pins
   pinMode(PIN_LED, OUTPUT);     // define PIN_LED as an output
   pinMode(PIN_GARAGE, OUTPUT);
-  digitalWrite(PIN_GARAGE, HIGH);
+  digitalWrite(PIN_GARAGE, LOW);
   digitalWrite(PIN_LED, LOW);   // set value to LOW (off) to match stateLED=0
 
   pinMode(PIN_GARAGE_CONTACT, INPUT_PULLUP);
