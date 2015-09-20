@@ -14,12 +14,10 @@ metadata {
 
         attribute "contact",   "string"
 
-        attribute "leftDoor",  "string"
-        attribute "rightDoor", "string"
+        attribute "garageDoor",  "string"
         attribute "backDoor",  "string"
 
-        command "pushLeft"
-        command "pushRight"
+        command "pushButton"
     }
 
     simulator {
@@ -34,15 +32,10 @@ metadata {
             state "open",    label: 'Open',    icon: "st.doors.garage.garage-open",    backgroundColor: "#ffa81e"
         }
 
-        standardTile("leftDoor", "device.leftDoor", width: 1, height: 1, canChangeIcon: true, canChangeBackground: true) {
-            state "closed",  label: "Closed",  icon: "st.doors.garage.garage-closed",  backgroundColor: "#79b821", action: "pushLeft", nextState: "open"
-            state "open",    label: "Open",    icon: "st.doors.garage.garage-open",    backgroundColor: "#ffa81e", action: "pushLeft", nextState: "toggle"
-            state "toggle",  label: "Toggle",  icon: "st.doors.garage.garage-opening", backgroundColor: "#89C2E8", action: "pushLeft", nextState: "toggle"
-        }
-        standardTile("rightDoor", "device.rightDoor", width: 1, height: 1, canChangeIcon: true, canChangeBackground: true) {
-            state "closed",  label: "Closed",  icon: "st.doors.garage.garage-closed",  backgroundColor: "#79b821", action: "pushRight", nextState: "open"
-            state "open",    label: "Open",    icon: "st.doors.garage.garage-open",    backgroundColor: "#ffa81e", action: "pushRight", nextState: "toggle"
-            state "toggle",  label: "Toggle",  icon: "st.doors.garage.garage-opening", backgroundColor: "#89C2E8", action: "pushRight", nextState: "toggle"
+        standardTile("garageDoor", "device.garageDoor", width: 1, height: 1, canChangeIcon: true, canChangeBackground: true) {
+            state "closed",  label: "Closed",  icon: "st.doors.garage.garage-closed",  backgroundColor: "#79b821", action: "pushButton", nextState: "open"
+            state "open",    label: "Open",    icon: "st.doors.garage.garage-open",    backgroundColor: "#ffa81e", action: "pushButton", nextState: "toggle"
+            state "toggle",  label: "Toggle",  icon: "st.doors.garage.garage-opening", backgroundColor: "#89C2E8", action: "pushButton", nextState: "toggle"
         }
         standardTile("backDoor", "device.backDoor", width: 1, height: 1, canChangeIcon: true, canChangeBackground: true) {
             state "closed",  label: "Closed",  icon: "st.contact.contact.closed",      backgroundColor: "#79b821"
@@ -51,7 +44,7 @@ metadata {
 
         main "contact"
 
-        details(["leftDoor", "rightDoor", "backDoor"])
+        details(["garageDoor", "backDoor"])
     }
 
 }
@@ -79,12 +72,7 @@ def parse(String description) {
     return result
 }
 
-def pushLeft() {
+def pushButton() {
     log.debug "Left Button pressed"
-    zigbee.smartShield(text: "pushLeft").format()
-}
-
-def pushRight() {
-    log.debug "Right Button pressed"
-    zigbee.smartShield(text: "pushRight").format()
+    zigbee.smartShield(text: "pushButton").format()
 }

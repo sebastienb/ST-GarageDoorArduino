@@ -1,83 +1,227 @@
-metadata {
-    // Automatically generated. Make future change here.
-    definition (name: "Arduino Garage", author: "Marius Piedallu van Wyk") {
-        capability "Switch"
-        capability "Sensor"
-        capability "Contact Sensor"
+/**
+ *  Arduino Garage
+ *
+ *  Author: Marius Piedallu van Wyk
+ *  Date: 2014-07-27
+ */
 
-        attribute "contact",   "string"
+//*****************************************************************************
+#include <SoftwareSerial.h>
+#include <SmartThings.h>
 
-        attribute "leftDoor",  "string"
-        attribute "rightDoor", "string"
-        attribute "backDoor",  "string"
+#define DO_BACK_DOOR
 
-        command "pushLeft"
-        command "pushRight"
-    }
+//*****************************************************************************
+// Pin Definitions
+//*****************************************************************************
+#define PIN_LED              13
+#define PIN_THING_RX          3
+#define PIN_THING_TX          2
+#define PIN_BACK_DOOR_CONTACT 4     // input
+#define PIN_GARAGE_CONTACT      8     // input
+#define PIN_GARAGE              9     // out
 
-    simulator {
-    }
+#define OPEN                  0     // HIGH
+#define CLOSED                1     // LOW
+#define UNKNOWN               2     // --- reset / force update
 
-    // Preferences
+#define PUSH_DELAY            1200  // milliseconds to keep the button "pushed"
 
-    // tile definitions
-    tiles {
-        standardTile("contact", "device.contact", width: 1, height: 1, canChangeIcon: true, canChangeBackground: true) {
-            state "closed",  label: 'Closed',  icon: "st.doors.garage.garage-closed",  backgroundColor: "#79b821"
-            state "open",    label: 'Open',    icon: "st.doors.garage.garage-open",    backgroundColor: "#ffa81e"
-        }
+//*****************************************************************************
+// Global Variables
+//*****************************************************************************
+SmartThingsCallout_t messageCallout;    // call out function forward decalaration
+SmartThings smartthing(PIN_THING_RX, PIN_THING_TX, messageCallout);  // constructor
 
-        standardTile("leftDoor", "device.leftDoor", width: 1, height: 1, canChangeIcon: true, canChangeBackground: true) {
-            state "closed",  label: "Closed",  icon: "st.doors.garage.garage-closed",  backgroundColor: "#79b821", action: "pushLeft", nextState: "open"
-            state "open",    label: "Open",    icon: "st.doors.garage.garage-open",    backgroundColor: "#ffa81e", action: "pushLeft", nextState: "toggle"
-            state "toggle",  label: "Toggle",  icon: "st.doors.garage.garage-opening", backgroundColor: "#89C2E8", action: "pushLeft", nextState: "toggle"
-        }
-        standardTile("rightDoor", "device.rightDoor", width: 1, height: 1, canChangeIcon: true, canChangeBackground: true) {
-            state "closed",  label: "Closed",  icon: "st.doors.garage.garage-closed",  backgroundColor: "#79b821", action: "pushRight", nextState: "open"
-            state "open",    label: "Open",    icon: "st.doors.garage.garage-open",    backgroundColor: "#ffa81e", action: "pushRight", nextState: "toggle"
-            state "toggle",  label: "Toggle",  icon: "st.doors.garage.garage-opening", backgroundColor: "#89C2E8", action: "pushRight", nextState: "toggle"
-        }
-        standardTile("backDoor", "device.backDoor", width: 1, height: 1, canChangeIcon: true, canChangeBackground: true) {
-            state "closed",  label: "Closed",  icon: "st.contact.contact.closed",      backgroundColor: "#79b821"
-            state "open",    label: "Open",    icon: "st.contact.contact.open",        backgroundColor: "#ffa81e"
-        }
+int leftClosed  = UNKNOWN;
+int backClosed  = UNKNOWN;
 
-        main "contact"
+int anyOpen     = UNKNOWN;
 
-        details(["leftDoor", "rightDoor", "backDoor"])
-    }
+bool isDebugEnabled=false;    // enable or disable debug in this example
+int stateLED;           // state to track last set value of LED
+int stateNetwork;       // state of the network
+
+//*****************************************************************************
+// Local Functions
+//*****************************************************************************
+void pushButton()
+{
+  smartthing.shieldSetLED(0, 0, 2); // blue
+  digitalWrite(PIN_GARAGE,LOW);
+  delay(PUSH_DELAY);
+  digitalWrite(PIN_GARAGE,HIGH);
+  smartthing.shieldSetLED(0, 0, 0); // off
+}
+
+//*****************************************************************************
+
+int isClosed(int pin)
+{
+  // LOW  -> closed
+  // HIGH -> open
+  return (digitalRead(pin) == LOW)?CLOSED:OPEN;
+}
+
+void updateDoorState()
+{
+  int newState;
+  char* msg = NULL;
+
+  newState = isClosed(PIN_GARAGE_CONTACT);
+  if (leftClosed != newState)
+  {
+    leftClosed = newState;
+    if(leftClosed == CLOSED) msg = "leftDoor closed";
+    else                     msg = "leftDoor open";
+
+    smartthing.send(msg);
+    if(isDebugEnabled) Serial.println(msg);
+    return; // only one message per loop
+  }
+
+
+#ifdef DO_BACK_DOOR
+  newState = isClosed(PIN_BACK_DOOR_CONTACT);
+  if (backClosed != newState)
+  {
+    backClosed = newState;
+    if(backClosed == CLOSED) msg = "backDoor closed";
+    else                     msg = "backDoor open";
+
+    smartthing.send(msg);
+    if(isDebugEnabled) Serial.println(msg);
+    return; // only one message per loop
+  }
+#endif
+
+  newState = CLOSED;
+
+#ifdef DO_BACK_DOOR
+  if(rightClosed == OPEN || leftClosed == OPEN || backClosed == OPEN) newState = OPEN;
+#else
+  if(rightClosed == OPEN || leftClosed == OPEN) newState = OPEN;
+#endif
+
+  if(anyOpen != newState)
+  {
+    anyOpen = newState;
+    if(anyOpen == CLOSED) msg = "anyDoor closed";
+    else                  msg = "anyDoor open";
+
+    smartthing.send(msg);
+    if(isDebugEnabled) Serial.println(msg);
+    return; // only one message per loop
+  }
 
 }
 
-def parse(String description) {
-    def msg = zigbee.parse(description)?.text
-    log.debug "Parse got '${msg}'"
+//*****************************************************************************
+void setNetworkStateLED()
+{
+  SmartThingsNetworkState_t tempState = smartthing.shieldGetLastNetworkState();
+  if (tempState != stateNetwork)
+  {
+    switch (tempState)
+    {
+      case STATE_NO_NETWORK:
+        if (isDebugEnabled) Serial.println("NO_NETWORK");
+        smartthing.shieldSetLED(2, 2, 0); // red
+        break;
+      case STATE_JOINING:
+        if (isDebugEnabled) Serial.println("JOINING");
+        smartthing.shieldSetLED(2, 2, 0); // yellow
+        break;
+      case STATE_JOINED:
+        if (isDebugEnabled) Serial.println("JOINED");
+        smartthing.shieldSetLED(0, 0, 0); // off
 
-    def parts = msg.split(" ")
-    def name  = parts.length>0?parts[0].trim():null
-    def value = parts.length>1?parts[1].trim():null
+        // force report of current door state
+        leftClosed  = UNKNOWN;
+        rightClosed = UNKNOWN;
+        backClosed  = UNKNOWN;
+        anyOpen     = UNKNOWN;
 
-    name = value != "ping" ? name : null
-
-    def result
-    if(name == "anyDoor") {
-        // Use anyDoor as the virtual contact sensor for whole space:
-        result = createEvent(name: "contact", value: value)
-    } else {
-        result = createEvent(name: name, value: value)
+        break;
+      case STATE_JOINED_NOPARENT:
+        if (isDebugEnabled) Serial.println("JOINED_NOPARENT");
+        smartthing.shieldSetLED(2, 0, 2); // purple
+        break;
+      case STATE_LEAVING:
+        if (isDebugEnabled) Serial.println("LEAVING");
+        smartthing.shieldSetLED(2, 2, 0); // yellow
+        break;
+      default:
+      case STATE_UNKNOWN:
+        if (isDebugEnabled) Serial.println("UNKNOWN");
+        smartthing.shieldSetLED(2, 0, 0); // red
+        break;
     }
-
-    log.debug result
-
-    return result
+    stateNetwork = tempState;
+  }
 }
 
-def pushLeft() {
-    log.debug "Left Button pressed"
-    zigbee.smartShield(text: "pushLeft").format()
+//*****************************************************************************
+// API Functions    | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
+//                  V V V V V V V V V V V V V V V V V V V V V V V V V V V V V V
+//*****************************************************************************
+void setup()
+{
+  // setup default state of global variables
+  isDebugEnabled = true;
+  stateLED = 0;                 // matches state of hardware pin set below
+  stateNetwork = STATE_JOINED;  // set to joined to keep state off if off
+
+  // setup hardware pins
+  pinMode(PIN_LED, OUTPUT);     // define PIN_LED as an output
+  pinMode(PIN_GARAGE, OUTPUT);
+  digitalWrite(PIN_GARAGE, HIGH);
+  digitalWrite(PIN_LED, LOW);   // set value to LOW (off) to match stateLED=0
+
+  pinMode(PIN_GARAGE_CONTACT, INPUT_PULLUP);
+  pinMode(PIN_BACK_DOOR_CONTACT, INPUT_PULLUP);
+
+  if(isDebugEnabled)
+  { // setup debug serial port
+    Serial.begin(9600);         // setup serial with a baud rate of 9600
+    Serial.println("setup..");  // print out 'setup..' on start
+  }
+
 }
 
-def pushRight() {
-    log.debug "Right Button pressed"
-    zigbee.smartShield(text: "pushRight").format()
+//*****************************************************************************
+void loop()
+{
+  // run smartthing logic
+  smartthing.run();
+
+  // Check network connections (and send initial states on Join)
+  setNetworkStateLED();
+
+  if(stateNetwork == STATE_JOINED)
+  {
+    // Check the open/closed state of the doors
+    updateDoorState();
+  }
+}
+
+//*****************************************************************************
+void messageCallout(String message)
+{
+  smartthing.shieldSetLED(2, 2, 2); // white
+
+  // if debug is enabled print out the received message
+  if(isDebugEnabled)
+  {
+    Serial.print("Received message: '");
+    Serial.print(message);
+    Serial.println("' ");
+  }
+
+  if(message.equals("pushButton"))
+  {
+    pushButton();
+  }
+
+  smartthing.shieldSetLED(0, 0, 0); // off
 }
