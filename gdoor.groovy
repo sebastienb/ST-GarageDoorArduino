@@ -42,7 +42,7 @@ metadata {
             state "open",    label: "Open",    icon: "st.contact.contact.open",        backgroundColor: "#ffa81e"
         }
 
-        main "contact"
+        main "garageDoor"
 
         details(["garageDoor", "backDoor"])
     }
